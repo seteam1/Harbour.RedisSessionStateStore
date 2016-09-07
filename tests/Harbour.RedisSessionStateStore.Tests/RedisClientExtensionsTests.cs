@@ -1,16 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using Xunit;
-using ServiceStack.Redis;
-using ServiceStack.Text;
+﻿using System.Collections.Generic;
+using NUnit.Framework;
+using ServiceStack;
 
 namespace Harbour.RedisSessionStateStore.Tests
 {
+    [TestFixture]
     public class RedisClientExtensionsTests : RedisTest
     {
-        [Fact]
+        [Test]
         public void SetRangeInHashRaw()
         {
             redis.SetRangeInHashRaw("abc:123", new Dictionary<string, byte[]>()
@@ -21,13 +18,13 @@ namespace Harbour.RedisSessionStateStore.Tests
             });
 
             var result = redis.GetAllEntriesFromHash("abc:123");
-            Assert.Equal(3, result.Count);
-            Assert.Equal("abc123", result["a"]);
-            Assert.Equal("1", result["b"]);
-            Assert.Equal("", result["c"]);
+            Assert.AreEqual(3, result.Count);
+            Assert.AreEqual("abc123", result["a"]);
+            Assert.AreEqual("1", result["b"]);
+            Assert.AreEqual("", result["c"]);
         }
 
-        [Fact]
+        [Test]
         public void GetAllEntriesFromHashRaw()
         {
             redis.SetRangeInHashRaw("abc:123", new Dictionary<string, byte[]>()
@@ -38,13 +35,13 @@ namespace Harbour.RedisSessionStateStore.Tests
             });
 
             var result = redis.GetAllEntriesFromHashRaw("abc:123");
-            Assert.Equal(3, result.Count);
-            Assert.Equal(new byte[] { 1, 2, 3, 4 }, result["a"]);
-            Assert.Equal(new byte[] { 1 }, result["b"]);
-            Assert.Equal(new byte[0], result["c"]);
+            Assert.AreEqual(3, result.Count);
+            Assert.AreEqual(new byte[] { 1, 2, 3, 4 }, result["a"]);
+            Assert.AreEqual(new byte[] { 1 }, result["b"]);
+            Assert.AreEqual(new byte[0], result["c"]);
         }
 
-        [Fact]
+        [Test]
         public void GetValueFromHashRaw()
         {
             redis.SetRangeInHashRaw("abc:123", new Dictionary<string, byte[]>()
@@ -53,16 +50,17 @@ namespace Harbour.RedisSessionStateStore.Tests
             });
 
             var result = redis.GetValueFromHashRaw("abc:123", "a");
-            Assert.Equal(new byte[] { 1, 2, 3, 4 }, result);
+            Assert.AreEqual(new byte[] { 1, 2, 3, 4 }, result);
         }
 
-        [Fact]
+        //This test only works correctly if you run it by itself.
+        [Test]
         public void SetEntryInHashIfNotExists()
         {
             Assert.True(redis.SetEntryInHashIfNotExists("abc:123", "a", new byte[] { 1, 2, 3, 4 }));
-            Assert.Equal(new byte[]{ 1, 2, 3, 4 }, redis.GetValueFromHashRaw("abc:123", "a"));
+            Assert.AreEqual(new byte[] { 1, 2, 3, 4 }, redis.GetValueFromHashRaw("abc:123", "a"));
             Assert.False(redis.SetEntryInHashIfNotExists("abc:123", "a", new byte[] { 4, 5, 6, 7 }));
-            Assert.Equal(new byte[] { 1, 2, 3, 4 }, redis.GetValueFromHashRaw("abc:123", "a"));
+            Assert.AreEqual(new byte[] { 1, 2, 3, 4 }, redis.GetValueFromHashRaw("abc:123", "a"));
         }
     }
 }

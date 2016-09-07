@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Reflection;
+using ServiceStack.Logging;
 using ServiceStack.Redis;
 
 namespace Harbour.RedisSessionStateStore.Tests
@@ -10,7 +11,7 @@ namespace Harbour.RedisSessionStateStore.Tests
     public abstract class RedisTest : IDisposable
     {
         // TODO: Should be different than development port!
-        protected virtual string Host { get { return "127.0.0.1:6379"; } }
+        protected virtual string Host { get { return "localhost:6379"; } }
 
         public IRedisClientsManager ClientManager { get; protected set; }
 
@@ -20,6 +21,7 @@ namespace Harbour.RedisSessionStateStore.Tests
         {
             this.ClientManager = new BasicRedisClientManager(this.Host);
             this.redis = this.GetRedisClient();
+            LogManager.LogFactory = new ConsoleLogFactory();
         }
 
         protected virtual IRedisClient GetRedisClient()

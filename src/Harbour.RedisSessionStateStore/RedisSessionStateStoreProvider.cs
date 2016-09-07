@@ -10,6 +10,7 @@ using ServiceStack.Redis;
 using System.Configuration.Provider;
 using System.IO;
 using System.Configuration;
+using ServiceStack.Logging;
 using ServiceStack.Redis.Support.Locking;
 
 namespace Harbour.RedisSessionStateStore
@@ -54,8 +55,10 @@ namespace Harbour.RedisSessionStateStore
     /// ]]>
     /// </code>
     /// </example>
-    public sealed class RedisSessionStateStoreProvider : SessionStateStoreProviderBase
+    public class RedisSessionStateStoreProvider : SessionStateStoreProviderBase
     {
+        public static ILog Logger = LogManager.GetLogger(typeof(RedisSessionStateStoreProvider));
+
         private static IRedisClientsManager clientManagerStatic;
         private static RedisSessionStateStoreOptions options;
         private static object locker = new object();
@@ -92,9 +95,16 @@ namespace Harbour.RedisSessionStateStore
             if (clientManager == null) throw new ArgumentNullException();
             if (clientManagerStatic != null)
             {
-                throw new InvalidOperationException("The client manager can only be configured once.");
+                var exception = new InvalidOperationException("The client manager can only be configured once.");
+                ThrowException(exception);
             }
             clientManagerStatic = clientManager;
+        }
+
+        private static void ThrowException(InvalidOperationException exception)
+        {
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Error, exception.Message, exception);
+            throw exception;
         }
 
         public static void SetOptions(RedisSessionStateStoreOptions options)
@@ -102,7 +112,8 @@ namespace Harbour.RedisSessionStateStore
             if (options == null) throw new ArgumentNullException("options");
             if (RedisSessionStateStoreProvider.options != null)
             {
-                throw new InvalidOperationException("The options have already been configured.");
+                var exception = new InvalidOperationException("The options have already been configured.");
+                ThrowException(exception);                
             }
 
             // Clone so that we don't allow references to be modified once 
@@ -113,11 +124,13 @@ namespace Harbour.RedisSessionStateStore
         internal static void ResetClientManager()
         {
             clientManagerStatic = null;
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, "Client Manager Reset");
         }
 
         internal static void ResetOptions()
         {
             options = null;
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, "Options Reset");
         }
         
         public override void Initialize(string name, NameValueCollection config)
@@ -128,11 +141,12 @@ namespace Harbour.RedisSessionStateStore
             }
 
             this.name = name;
-            
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("name= {0} ", name));
             lock (locker)
             {
                 if (options == null)
                 {
+                    RedisSessionLogging.WriteLog(Logger,LoggingLevelEnum.Info, "Setting Options");
                     SetOptions(new RedisSessionStateStoreOptions());
                 }
 
@@ -141,14 +155,17 @@ namespace Harbour.RedisSessionStateStore
                     var host = config["host"];
                     var clientType = config["clientType"];
 
+                    RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("Host= {0} ClientType= {1}", host,clientType));
+
                     clientManager = CreateClientManager(clientType, host);
-                    manageClientManagerLifetime = true;
+                    manageClientManagerLifetime = true;                    
                 }
                 else
                 {
                     clientManager = clientManagerStatic;
-                    manageClientManagerLifetime = false;
+                    manageClientManagerLifetime = false;                    
                 }
+                RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("manageClientManagerLifetime= {0}, ClientType={1} ", manageClientManagerLifetime, clientManager.GetType()));
             }
 
             base.Initialize(name, config);
@@ -203,11 +220,15 @@ namespace Harbour.RedisSessionStateStore
 
         private string GetSessionIdKey(string id)
         {
-            return name + options.KeySeparator + id;
+            var sessionIdKey = name + options.KeySeparator + id;
+
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==RedisSessionStateStoreProvider:GetSessionIdKey {0}",sessionIdKey));
+            return sessionIdKey;
         }
 
         public override void CreateUninitializedItem(HttpContext context, string id, int timeout)
         {
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, "==BEGIN RedisSessionStateStoreProvider:CreateUninitializedItem");
             var key = GetSessionIdKey(id);
             using (var client = GetClient())
             {
@@ -219,13 +240,13 @@ namespace Harbour.RedisSessionStateStore
 
                 UpdateSessionState(client, key, state);
             }
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, "==END RedisSessionStateStoreProvider:CreateUninitializedItem");
         }
 
         public override SessionStateStoreData CreateNewStoreData(HttpContext context, int timeout)
         {
-            return new SessionStateStoreData(new SessionStateItemCollection(),
-               staticObjectsGetter(context),
-               timeout);
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==END RedisSessionStateStoreProvider:CreateNewStoreData| Context={0}, timeout={1}",context,timeout));
+            return new SessionStateStoreData(new SessionStateItemCollection(), staticObjectsGetter(context), timeout);
         }
 
         public override void InitializeRequest(HttpContext context)
@@ -240,15 +261,18 @@ namespace Harbour.RedisSessionStateStore
 
         private void UseTransaction(IRedisClient client, Action<IRedisTransaction> action)
         {
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, "==BEGIN RedisSessionStateStoreProvider:UseTransaction");
             using (var transaction = client.CreateTransaction())
             {
                 action(transaction);
                 transaction.Commit();
             }
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, "==END RedisSessionStateStoreProvider:UseTransaction");
         }
 
         public override void ResetItemTimeout(HttpContext context, string id)
         {
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==BEGIN RedisSessionStateStoreProvider:RemoveItem| Context={0}, id={1}", context, id));
             var key = GetSessionIdKey(id);
             using (var client = GetClient())
             {
@@ -257,10 +281,16 @@ namespace Harbour.RedisSessionStateStore
                     transaction.QueueCommand(c => c.ExpireEntryIn(key, TimeSpan.FromMinutes(context.Session.Timeout)));
                 });
             };
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==END RedisSessionStateStoreProvider:RemoveItem| Context={0}, id={1}", context, id));
         }
 
         public override void RemoveItem(HttpContext context, string id, object lockId, SessionStateStoreData item)
         {
+            string items = "None";
+            if (item != null && item.Items != null)
+                items = item.Items.Count.ToString();
+
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==BEGIN RemoveItem== RedisSessionStateStoreProvider| Context={0}, id={1}, lockId={2}, item={3}  ",context,id,lockId, items));
             var key = GetSessionIdKey(id);
             using (var client = GetClient())
             using (var distributedLock = GetDistributedLock(client, key))
@@ -268,6 +298,7 @@ namespace Harbour.RedisSessionStateStore
                 if (distributedLock.LockState == DistributedLock.LOCK_NOT_ACQUIRED)
                 {
                     options.OnDistributedLockNotAcquired(id);
+                    RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, "==END RemoveItem== RedisSessionStateStoreProvider| Lock not Acquired");
                     return;
                 }
 
@@ -280,22 +311,29 @@ namespace Harbour.RedisSessionStateStore
                     {
                         transaction.QueueCommand(c => c.Remove(key));
                     }
+                    var stateString = "None";
+                    if (state != null)
+                        stateString = string.Format("Created:{0}, LockId:{1}, Locked:{2}, LockDate:{3}", state.Created, state.LockId, state.Locked, state.LockDate);
+                    
+                    RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("RedisSessionStateStoreProvider: state => {0}",stateString));
                 });
             }
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, "==END RemoveItem== RedisSessionStateStoreProvider");
         }
 
         public override SessionStateStoreData GetItem(HttpContext context, string id, out bool locked, out TimeSpan lockAge, out object lockId, out SessionStateActions actions)
-        {
+        {            
             return GetItem(false, context, id, out locked, out lockAge, out lockId, out actions);
         }
 
         public override SessionStateStoreData GetItemExclusive(HttpContext context, string id, out bool locked, out TimeSpan lockAge, out object lockId, out SessionStateActions actions)
-        {
+        {            
             return GetItem(true, context, id, out locked, out lockAge, out lockId, out actions);
         }
 
         private SessionStateStoreData GetItem(bool isExclusive, HttpContext context, string id, out bool locked, out TimeSpan lockAge, out object lockId, out SessionStateActions actions)
         {
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==BEGIN RedisSessionStateStoreProvider:GetItem| Context={0}, id={1} ", context, id));
             locked = false;
             lockAge = TimeSpan.Zero;
             lockId = null;
@@ -308,6 +346,7 @@ namespace Harbour.RedisSessionStateStore
             {
                 if (distributedLock.LockState == DistributedLock.LOCK_NOT_ACQUIRED)
                 {
+                    RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==GetItem:DistributedLock.LOCK_NOT_ACQUIRED| Context={0}, id={1} ", context, id));
                     options.OnDistributedLockNotAcquired(id);
                     return null;
                 }
@@ -317,6 +356,7 @@ namespace Harbour.RedisSessionStateStore
                 RedisSessionState state;
                 if (!RedisSessionState.TryParse(stateRaw, out state))
                 {
+                    RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==GetItem:RedisSessionState| Context={0}, id={1} ", context, id));
                     return null;
                 }
 
@@ -327,6 +367,7 @@ namespace Harbour.RedisSessionStateStore
                     locked = true;
                     lockId = state.LockId;
                     lockAge = DateTime.UtcNow - state.LockDate;
+                    RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==GetItem:Locked State| locked={0}, lockId={1}, lockAge={2} ", locked, lockId, lockAge));
                     return null;
                 }
 
@@ -336,6 +377,7 @@ namespace Harbour.RedisSessionStateStore
                     state.LockDate = DateTime.UtcNow;
                     lockAge = TimeSpan.Zero;
                     lockId = ++state.LockId;
+                    RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==GetItem:IsExclusive| locked={0}, lockId={1}, lockAge={2}, lockDate={3} ", locked, lockId, lockAge, state.LockDate));
                 }
 
                 state.Flags = SessionStateActions.None;
@@ -350,12 +392,13 @@ namespace Harbour.RedisSessionStateStore
 
                 result = new SessionStateStoreData(items, staticObjectsGetter(context), state.Timeout);
             }
-
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==END RedisSessionStateStoreProvider:GetItem| Context={0}, id={1}, locked={2}, lockAge={3}, lockId={4} ", context, id, locked, lockAge, lockId));
             return result;
-        }
+        }        
 
         public override void ReleaseItemExclusive(HttpContext context, string id, object lockId)
         {
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==BEGIN RedisSessionStateStoreProvider:ReleaseItemExclusive| Context={0}, id={1}, lockId={2} ", context, id, lockId));
             using (var client = GetClient())
             {
                 UpdateSessionStateIfLocked(client, id, (int)lockId, state =>
@@ -364,10 +407,12 @@ namespace Harbour.RedisSessionStateStore
                     state.Timeout = context.Session.Timeout;
                 });
             }
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==END RedisSessionStateStoreProvider:ReleaseItemExclusive| Context={0}, id={1}, lockId={2} ", context, id, lockId));
         }
 
         public override void SetAndReleaseItemExclusive(HttpContext context, string id, SessionStateStoreData item, object lockId, bool newItem)
         {
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==BEGIN RedisSessionStateStoreProvider:SetAndReleaseItemExclusive| Context={0}, id={1}, lockId={2} ", context, id, lockId));
             using (var client = GetClient())
             {
                 if (newItem)
@@ -379,10 +424,11 @@ namespace Harbour.RedisSessionStateStore
                     };
 
                     var key = GetSessionIdKey(id);
-                    UpdateSessionState(client, key, state);
+                    UpdateSessionState(client, key, state);                    
                 }
                 else
                 {
+                    RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==RedisSessionStateStoreProvider:UpdateSessionState| Context={0}, id={1}, lockId={2} ", context, id, lockId));
                     UpdateSessionStateIfLocked(client, id, (int)lockId, state =>
                     {
                         state.Items = (SessionStateItemCollection)item.Items;
@@ -391,16 +437,19 @@ namespace Harbour.RedisSessionStateStore
                     });
                 }
             }
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==END RedisSessionStateStoreProvider:SetAndReleaseItemExclusive| Context={0}, id={1}, lockId={2} ", context, id, lockId));
         }
 
         private void UpdateSessionStateIfLocked(IRedisClient client, string id, int lockId, Action<RedisSessionState> stateAction)
         {
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==BEGIN RedisSessionStateStoreProvider:UpdateSessionStateIfLocked| client={0}, lockId={1} ", client, lockId));
             var key = GetSessionIdKey(id);
             using (var distributedLock = GetDistributedLock(client, key))
             {
                 if (distributedLock.LockState == DistributedLock.LOCK_NOT_ACQUIRED)
                 {
                     options.OnDistributedLockNotAcquired(id);
+                    RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==END RedisSessionStateStoreProvider:UpdateSessionStateIfLocked| Lock Not Acquired client={0}, key={1}, lockId={2}  ", client, key, lockId));
                     return;
                 }
 
@@ -412,15 +461,18 @@ namespace Harbour.RedisSessionStateStore
                     UpdateSessionState(client, key, state);
                 }
             }
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==END RedisSessionStateStoreProvider:UpdateSessionStateIfLocked| client={0}, key={1}, lockId={2}  ", client, key, lockId));
         }
 
         private void UpdateSessionState(IRedisClient client, string key, RedisSessionState state)
         {
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==BEGIN RedisSessionStateStoreProvider:UpdateSessionState| client={0}, key={1}, state={2} ", client, key,state));
             UseTransaction(client, transaction =>
             {
                 transaction.QueueCommand(c => c.SetRangeInHashRaw(key, state.ToMap()));
                 transaction.QueueCommand(c => c.ExpireEntryIn(key, TimeSpan.FromMinutes(state.Timeout)));
             });
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==END RedisSessionStateStoreProvider:UpdateSessionState| client={0}, key={1}, state={2}  ", client,key,state));
         }
 
         public override bool SetItemExpireCallback(SessionStateItemExpireCallback expireCallback)
@@ -435,10 +487,12 @@ namespace Harbour.RedisSessionStateStore
 
         public override void Dispose()
         {
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==BEGIN RedisSessionStateStoreProvider:Dispose"));
             if (manageClientManagerLifetime)
             {
                 clientManager.Dispose();
             }
+            RedisSessionLogging.WriteLog(Logger, LoggingLevelEnum.Info, string.Format("==END RedisSessionStateStoreProvider:Dispose"));
         }
     }
 }
