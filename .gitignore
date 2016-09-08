@@ -35,3 +35,4 @@ _ReSharper*/
 [Tt]est
 [Bb]uild[Ll]og.*
 *.[Pp]ublish.xml
+/src/packages
