@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using NUnit.Framework;
 using ServiceStack;
+using ServiceStack.Redis;
 
 namespace Harbour.RedisSessionStateStore.Tests
 {
@@ -57,6 +58,7 @@ namespace Harbour.RedisSessionStateStore.Tests
         [Test]
         public void SetEntryInHashIfNotExists()
         {
+            redis.RemoveEntryFromHash("abc:123", "a");
             Assert.True(redis.SetEntryInHashIfNotExists("abc:123", "a", new byte[] { 1, 2, 3, 4 }));
             Assert.AreEqual(new byte[] { 1, 2, 3, 4 }, redis.GetValueFromHashRaw("abc:123", "a"));
             Assert.False(redis.SetEntryInHashIfNotExists("abc:123", "a", new byte[] { 4, 5, 6, 7 }));
