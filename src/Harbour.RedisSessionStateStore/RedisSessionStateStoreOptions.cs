@@ -8,7 +8,7 @@ namespace Harbour.RedisSessionStateStore
 {
     public delegate void DistributedLockNotAcquiredHandler(string sessionId);
 
-    public class RedisSessionStateStoreOptions : RedisSessionBase
+    public class RedisSessionStateStoreOptions
     {
         private static readonly string defaultKeySeparator = "/";
         private static readonly int defaultDistributedLockAcquisitionTimeoutSeconds = 1;
@@ -19,7 +19,7 @@ namespace Harbour.RedisSessionStateStore
                                         "This most likely means you have to increase the " +
                                         "DistributedLockAcquireSeconds/DistributedLockTimeoutSeconds.", sessionId);
             
-            WriteLog(LoggingLevelEnum.Warn, message);
+            
         };
 
         public string KeySeparator { get; set; }

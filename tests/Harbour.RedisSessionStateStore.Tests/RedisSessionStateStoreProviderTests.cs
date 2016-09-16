@@ -7,10 +7,13 @@ using System.Web;
 using Moq;
 using System.Web.SessionState;
 using System.Collections;
+using System.Configuration;
 using System.IO;
 using System.Runtime.Serialization;
 using System.Reflection;
 using NUnit.Framework;
+using Serilog;
+using ServiceStack.Logging;
 
 namespace Harbour.RedisSessionStateStore.Tests
 {
@@ -27,6 +30,35 @@ namespace Harbour.RedisSessionStateStore.Tests
             this.itemsA = new SessionStateItemCollection();
             this.itemsA["name"] = "Felix";
             this.itemsA["age"] = 1;
+        }
+
+        [Test]
+        public void TestLogFileCreated()
+        {
+            var config = new LoggerConfiguration().ReadFrom.AppSettings();
+            Log.Logger = config.CreateLogger();
+
+
+            var provider = new RedisSessionStateStoreProvider();
+            provider.Initialize("APP_NAME", new NameValueCollection()
+            {
+                { "Host", "9.9.9.9:999" },
+                { "clientType", "pooled" }
+            });
+            Assert.IsInstanceOf<PooledRedisClientManager>(provider.ClientManager);
+
+            var today = DateTime.Now;
+            var path = "D:\\Log\\HarbourSession\\HarbourSessionProvider-" + today.ToString("yyyyMMdd") + ".txt";
+            Log.Logger = new LoggerConfiguration().WriteTo.ColoredConsole().CreateLogger();
+
+            //TODO: Once we can upgrade to Serilog 2.0+, just remove the exception assertion but keep the guts
+            Assert.Throws<IOException>(() =>
+            {
+                using (var fs = new StreamReader(path))
+                {
+                    Assert.IsNotEmpty(fs.ReadToEnd());
+                }
+            });
         }
 
         [Test]

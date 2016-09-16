@@ -7,7 +7,7 @@ using System.IO;
 
 namespace Harbour.RedisSessionStateStore
 {
-    internal class RedisSessionState : RedisSessionBase
+    internal class RedisSessionState
     {
         public DateTime Created { get; set; }
         public bool Locked { get; set; }
@@ -26,8 +26,6 @@ namespace Harbour.RedisSessionStateStore
 
         public IDictionary<string, byte[]> ToMap()
         {
-            WriteLog(LoggingLevelEnum.Info, "==Begin ToMap==");
-
             var map = new Dictionary<string, byte[]>()
             {
                 { "created", BitConverter.GetBytes(this.Created.Ticks) },
@@ -46,18 +44,15 @@ namespace Harbour.RedisSessionStateStore
                 writer.Close();
             }
 
-            WriteLog(LoggingLevelEnum.Info, "==End ToMap==");
             return map;
         }
 
         public static bool TryParse(IDictionary<string, byte[]> raw, out RedisSessionState data)
         {
-            WriteLog(LoggingLevelEnum.Info, "==BEGIN TryParse==");
 
             if (raw == null || raw.Count != 7)
             {
                 data = null;
-                WriteLog(LoggingLevelEnum.Info, "==TryParse: No Data==");
                 return false;
             }
 
@@ -65,7 +60,6 @@ namespace Harbour.RedisSessionStateStore
 
             using (var ms = new MemoryStream(raw["items"]))
             {
-                WriteLog(LoggingLevelEnum.Info, "==TryParse: BEGIN Read Session Data==");
                 if (ms.Length > 0)
                 {
                     using (var reader = new BinaryReader(ms))
@@ -77,7 +71,6 @@ namespace Harbour.RedisSessionStateStore
                 {
                     sessionItems = new SessionStateItemCollection();
                 }
-                WriteLog(LoggingLevelEnum.Info, "==TryParse: END Read Session Data==");
             }
 
             data = new RedisSessionState()
@@ -91,8 +84,6 @@ namespace Harbour.RedisSessionStateStore
                 Items = sessionItems
             };
 
-            WriteLog(LoggingLevelEnum.Info, string.Format("==TryParse: data => Created={0} Locked={1} LockId={2} LockDate={3} Timeout={4} Flags={5}, Items={6}==",data.Created.ToShortDateString(),data.Locked, data.LockId, data.LockDate.ToShortDateString(), data.Timeout, data.Flags,data.Items));
-            WriteLog(LoggingLevelEnum.Info, "==END TryParse==");
             return true;
         }
     }
