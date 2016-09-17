@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Linq;
 using System.Text;
 using System.Reflection;
@@ -11,7 +12,7 @@ namespace Harbour.RedisSessionStateStore.Tests
     public abstract class RedisTest : IDisposable
     {
         // TODO: Should be different than development port!
-        protected virtual string Host { get { return "cachecluster.vpc.dev.phtech.com:6379"; } }
+        protected virtual string Host { get { return ConfigurationManager.AppSettings["redis-server"]; } }
 
         public IRedisClientsManager ClientManager { get; protected set; }
 

@@ -175,7 +175,7 @@ namespace Harbour.RedisSessionStateStore
         {
             if (String.IsNullOrWhiteSpace(host))
             {
-                host = "localhost:6379";
+                throw new Exception("No host specified!");
             }
 
             if (String.IsNullOrWhiteSpace(clientType))
