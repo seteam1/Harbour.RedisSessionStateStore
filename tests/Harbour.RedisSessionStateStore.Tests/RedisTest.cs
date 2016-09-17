@@ -11,7 +11,7 @@ namespace Harbour.RedisSessionStateStore.Tests
     public abstract class RedisTest : IDisposable
     {
         // TODO: Should be different than development port!
-        protected virtual string Host { get { return "localhost:6379"; } }
+        protected virtual string Host { get { return "cachecluster.vpc.dev.phtech.com:6379"; } }
 
         public IRedisClientsManager ClientManager { get; protected set; }
 
