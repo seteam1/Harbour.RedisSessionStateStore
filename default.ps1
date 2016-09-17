@@ -6,21 +6,6 @@ function Write-Documentation(){
     write-host "Example - delete tag: psake DeleteTag -properties @{Tag='2016.01.*'} - * => Wildcard"
 }
 
-function Check-ProductionTag($tag){
-
-    #need to figure out how to check if end has "_old" or "_orig"
-    $regexProdTags = "^\d{1}\.\d{1}\.\d{1}\.\d{1,2}$"
-
-    if($item -notmatch $regexProdTags -and $item -ne "v1.0.0.0"){
-        #Write-Host $item " " $item.Length " " $item.Substring($item.Length-4, 4).ToLower() 
-        if($item.Length -gt 5 -and $item.Substring($item.Length-4, 4).ToLower() -ne "_old" -and $item.Substring($item.Length-5, 5).ToLower() -ne "_orig"){
-            return $false;
-        }
-    }
-
-    return $true;
-}
-
 task default -depends ?
 
 properties{
@@ -44,22 +29,6 @@ task verify_variables {
     Assert ($release -ne $null) "psake variable does not contain 'release'"
 }
 
-task DeleteTag -depends ? {
-
-    $foundTags = Exec { git tag -l $Tag }
-
-    ForEach($item In $foundTags){
-
-        if(-Not (Check-ProductionTag($item))){
-            Write-Host $item
-            Exec { git tag -d $item }
-            Exec { git push origin :refs/tags/$item -q }
-        } else{
-            Write-Host "Not Deleting: " $item
-        }
-    }
-}
-
 task updateAssemblyInfo -depends verify_variables {
     Update-AssemblyInfoFiles -version $release
 }
@@ -74,7 +43,9 @@ task build {
 	Exec { msbuild "$solution_path" /t:Build /p:Configuration=Release /v:quiet }
 }
 
-task package -depends updateAssemblyInfo, build, tagRelease {
+task package -depends build, tagRelease {
+	Update-AssemblyInfoFiles -version $release
+	
 	$specPath = "$build_dir\build\Harbour.RedisSessionStateStore.nuspec"
     $specFileName = "Harbour.RedisSessionStateStore.nuspec"
 	
@@ -83,15 +54,14 @@ task package -depends updateAssemblyInfo, build, tagRelease {
     $Spec.package.metadata.version = ([string]$Spec.package.metadata.version).Replace("{Version}",$release)
     $Spec.Save("$build_dir\$specFileName")
 
-    exec { nuget pack "$specPath" -OutputDirectory $build_dir }
+    exec { nuget pack "$build_dir\$specFileName" -OutputDirectory $build_dir }
     
     $NuGetPackageName = "PHTech.Harbour.RedisSessionStateStore.$release.nupkg"
-    exec { nuget delete "PHTech.Harbour.RedisSessionStateStore" $release 098b2149-1570-4fbb-bcef-88554c812752 -Source https://www.myget.org/F/phtech/api/v2/package -NonInteractive }
+	
     exec { nuget push "$build_dir\$NuGetPackageName" 098b2149-1570-4fbb-bcef-88554c812752 -Source https://www.myget.org/F/phtech-pdt/api/v2/package }
-    
+    exec { del $specFileName }
+	exec { del $NuGetPackageName }
 	Update-AssemblyInfoFiles ("1.0.0.0")
-	
-	
 }
 
 function Update-AssemblyInfoFiles ([string] $version, [System.Array] $excludes = $null, $make_writeable = $false) {

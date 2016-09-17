@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
   <metadata>
     <id>PHTech.Harbour.RedisSessionStateStore</id>
-    <version>1.0.0.0</version>
+    <version>{Version}</version>
     <authors>PHTECH</authors>
     <licenseUrl>http://opensource.org/licenses/MIT</licenseUrl>
     <projectUrl>https://github.com/seteam1/Harbour.RedisSessionStateStore</projectUrl>
@@ -19,8 +19,8 @@
     </dependencies>
   </metadata>
   <files>
-    <file src="..\src\Harbour.RedisSessionStateStore\bin\Release\Harbour.RedisSessionStateStore*.dll" target="lib\net40" />
-    <file src="..\src\Harbour.RedisSessionStateStore\bin\Release\Harbour.RedisSessionStateStore*.pdb" target="lib\net40" />
-    <file src="..\src\Harbour.RedisSessionStateStore\bin\Release\Harbour.RedisSessionStateStore*.xml" target="lib\net40" />
+    <file src="src\Harbour.RedisSessionStateStore\bin\Release\Harbour.RedisSessionStateStore*.dll" target="lib\net40" />
+    <file src="src\Harbour.RedisSessionStateStore\bin\Release\Harbour.RedisSessionStateStore*.pdb" target="lib\net40" />
+    <file src="src\Harbour.RedisSessionStateStore\bin\Release\Harbour.RedisSessionStateStore*.xml" target="lib\net40" />
   </files>
 </package>
