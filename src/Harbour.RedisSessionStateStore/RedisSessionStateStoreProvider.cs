@@ -11,8 +11,6 @@ using System.Configuration.Provider;
 using System.IO;
 using System.Configuration;
 using Serilog;
-using ServiceStack;
-using ServiceStack.Logging;
 using ServiceStack.Redis.Support.Locking;
 
 namespace Harbour.RedisSessionStateStore
@@ -57,7 +55,7 @@ namespace Harbour.RedisSessionStateStore
     /// ]]>
     /// </code>
     /// </example>
-    public class RedisSessionStateStoreProvider : SessionStateStoreProviderBase
+    public sealed class RedisSessionStateStoreProvider : SessionStateStoreProviderBase
     {
         private static IRedisClientsManager clientManagerStatic;
         private static RedisSessionStateStoreOptions options;
@@ -67,6 +65,7 @@ namespace Harbour.RedisSessionStateStore
         private IRedisClientsManager clientManager;
         private bool manageClientManagerLifetime;
         private string name;
+        private int sessionTimeoutMinutes;
 
         /// <summary>
         /// Gets the client manager for the provider.
@@ -135,40 +134,48 @@ namespace Harbour.RedisSessionStateStore
         
         public override void Initialize(string name, NameValueCollection config)
         {
-            Log.Information("---Begin Session State Provider initialization----");
             if (String.IsNullOrWhiteSpace(name))
             {
                 name = "AspNetSession";
             }
 
             this.name = name;
+            var sessionConfig = (SessionStateSection)WebConfigurationManager.GetSection("system.web/sessionState");
+            sessionTimeoutMinutes = (int)sessionConfig.Timeout.TotalMinutes;
+            if (sessionTimeoutMinutes <= 0)
+            {
+                sessionTimeoutMinutes = 20;
+            }
+
             lock (locker)
             {
                 if (options == null)
                 {
-                    var list = config.Cast<string>().Select(key => new KeyValuePair<string, string>(key, config[key]));
-                    Log.Information("Configuration options are: {@list}", list);
                     SetOptions(new RedisSessionStateStoreOptions());
+                    
                 }
 
                 if (clientManagerStatic == null)
                 {
+
                     var host = config["host"];
                     var clientType = config["clientType"];
 
                     clientManager = CreateClientManager(clientType, host);
-                    manageClientManagerLifetime = true;                    
+                    manageClientManagerLifetime = true;
+                    Log.Information("----Session State Provider Initialized----");
+                    List<KeyValuePair<string, string>> list = config.Cast<string>().Select(key => new KeyValuePair<string, string>(key, config[key])).ToList();
+                    Log.Information("Configuration options are: {@list}", list);
+                    Log.Information("ClientType = {1} ", manageClientManagerLifetime, clientManager.GetType());
                 }
                 else
                 {
                     clientManager = clientManagerStatic;
                     manageClientManagerLifetime = false;                    
                 }
-                Log.Information("manageClientManagerLifetime = {0}, ClientType = {1} ", manageClientManagerLifetime, clientManager.GetType());
             }
 
             base.Initialize(name, config);
-            Log.Information("----End----");
         }
 
         private IRedisClientsManager CreateClientManager(string clientType, string host)
@@ -237,6 +244,7 @@ namespace Harbour.RedisSessionStateStore
                 };
 
                 UpdateSessionState(client, key, state);
+                Log.Information("Session Started: {0}", id);
             }
         }
 
@@ -271,7 +279,7 @@ namespace Harbour.RedisSessionStateStore
             {
                 UseTransaction(client, transaction =>
                 {
-                    transaction.QueueCommand(c => c.ExpireEntryIn(key, TimeSpan.FromMinutes(context.Session.Timeout)));
+                    transaction.QueueCommand(c => c.ExpireEntryIn(key, TimeSpan.FromMinutes(sessionTimeoutMinutes)));
                 });
             };
 
@@ -279,10 +287,6 @@ namespace Harbour.RedisSessionStateStore
 
         public override void RemoveItem(HttpContext context, string id, object lockId, SessionStateStoreData item)
         {
-            string items = "None";
-            if (item != null && item.Items != null)
-                items = item.Items.Count.ToString();
-
             var key = GetSessionIdKey(id);
             using (var client = GetClient())
             using (var distributedLock = GetDistributedLock(client, key))
@@ -301,12 +305,8 @@ namespace Harbour.RedisSessionStateStore
                     if (RedisSessionState.TryParse(stateRaw, out state) && state.Locked && state.LockId == (int)lockId)
                     {
                         transaction.QueueCommand(c => c.Remove(key));
-                        Log.Verbose("Item Removed: {0}", key);
+                        Log.Information("Item Removed: {0}", key);
                     }
-                    var stateString = "None";
-                    if (state != null)
-                        stateString = string.Format("Created:{0}, LockId:{1}, Locked:{2}, LockDate:{3}", state.Created, state.LockId, state.Locked, state.LockDate);
-                    
                 });
             }
         }
@@ -393,7 +393,7 @@ namespace Harbour.RedisSessionStateStore
                 UpdateSessionStateIfLocked(client, id, (int)lockId, state =>
                 {
                     state.Locked = false;
-                    state.Timeout = context.Session.Timeout;
+                    state.Timeout = sessionTimeoutMinutes;
                 });
             }
         }
@@ -489,12 +489,10 @@ namespace Harbour.RedisSessionStateStore
 
         public override void Dispose()
         {
-            Log.Information("----Begin Session State Disposal----");
             if (manageClientManagerLifetime)
             {
                 clientManager.Dispose();
             }
-            Log.Information("----End----");
         }
     }
 }

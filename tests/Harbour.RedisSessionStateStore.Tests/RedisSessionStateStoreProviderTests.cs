@@ -73,8 +73,7 @@ namespace Harbour.RedisSessionStateStore.Tests
             Assert.IsInstanceOf<PooledRedisClientManager>(provider.ClientManager);
 
             var today = DateTime.Now;
-            var path = "D:\\Log\\HarbourSession\\HarbourSessionProvider-" + today.ToString("yyyyMMdd") + ".txt";
-            Log.Logger = new LoggerConfiguration().WriteTo.ColoredConsole().CreateLogger();
+            var path = "D:\\Log\\HarbourSession\\test\\HarbourSessionProvider-" + today.ToString("yyyyMMdd") + ".txt";
 
             //TODO: Once we can upgrade to Serilog 2.0+, just remove the exception assertion but keep the guts
             Assert.Throws<IOException>(() =>
